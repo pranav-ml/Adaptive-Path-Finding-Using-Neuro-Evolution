@@ -4,6 +4,10 @@ import neat
 import os
 import math
 import pickle
+import algorithms
+import copy
+import os
+
 
 max_score = 0
 
@@ -33,6 +37,7 @@ class cube():
         self.down = True
         self.x_vel = 0
         self.y_vel = 1
+        self.path = []
 
     def draw(self, win):
         pygame.draw.rect(win, (0, 0, 255), (self.x, self.y, 19, 19))
@@ -57,13 +62,13 @@ class food():
 
 
 class game():
-    def __init__(self, net):
-        self.net = net
+    def __init__(self, algorithm, file):
         # self.genome = genome
+        self.file = file
         self.gr = grid()
         self.run = True
-        self.cube = cube(random.randrange(21, 222, 20), random.randrange(21, 222, 20))
-        self.body = [head(self.cube.x,self.cube.y)]
+        self.cube = cube(21,21)
+        self.body = [head(self.cube.x,self.cube.y-20)]
         self.food = food()
         self.score = 0
         self.gamedecider = 0
@@ -73,6 +78,8 @@ class game():
         self.moves_left = 200
         # self.genome_to_display = genome_to_display
         self.board = [[0] * 25 for _ in range(25)]
+        self.algorithm = algorithm
+        self.update_board(False)
 
     def update_board(self, toprint):
         # print(cube.y//20, cube.x//20)
@@ -84,10 +91,11 @@ class game():
         self.board[self.food.y // 20][self.food.x // 20] = 100
         for sq in self.body:
             self.board[sq.y // 20][sq.x // 20] = -100
-        # if toprint:
-        #     os.system('cls')
-        #     for row in self.board:
-        #         print(*row)
+        self.board[self.cube.y//20][self.cube.x//20] = 1000 if self.board[self.cube.y//20][self.cube.x//20] != -100 else -100
+        if toprint:
+            os.system('cls')
+            for row in self.board:
+                print(*row)
 
     def xpos(self, x):
         return self.body[x].x
@@ -111,6 +119,66 @@ class game():
             return self.board[current_row-1*xvel][current_col], self.board[current_row][current_col+1*xvel], self.board[current_row+1*xvel][current_col]
         else:
             return self.board[current_row][current_col+1*yvel], self.board[current_row+1*yvel][current_col], self.board[current_row][current_col-1*yvel]
+
+    def long_vision(self):
+        def rotate(matrix, n):
+            for _ in range(n):
+                matrix = list(zip(*matrix[::-1]))
+            return matrix
+
+        duplicate = copy.deepcopy(self.board)
+        n = 0
+        if self.cube.x_vel == -1:
+            n = 1
+        elif self.cube.y_vel == 1:
+            n = 2
+        elif self.cube.x_vel == 1:
+            n = 3
+        duplicate = rotate(duplicate, n)
+        for r, row in enumerate(duplicate):
+            for c in range(25):
+                if row[c] == 1000:
+                    ro = r
+                    co = c
+                    break
+        current_row = ro
+        current_col = co
+        left = 0
+        while duplicate[current_row][current_col] != -100:
+            left += 1
+            current_col -= 1
+        current_row = ro
+        current_col = co
+        forward = 0
+        while duplicate[current_row][current_col] != -100:
+            forward += 1
+            current_row -= 1
+        current_row = ro
+        current_col = co
+        right = 0
+        while duplicate[current_row][current_col] != -100:
+            right += 1
+            current_col += 1
+        current_row = ro
+        current_col = co
+        left_diagonal = 0
+        while duplicate[current_row][current_col] != -100:
+            left_diagonal += 1
+            current_col -= 1
+            current_row -= 1
+        current_row = ro
+        current_col = co
+        right_diagonal = 0
+        while duplicate[current_row][current_col] != -100:
+            right_diagonal += 1
+            current_col += 1
+            current_row -=1
+        return left - 1, forward - 1, right - 1, left_diagonal - 1, right_diagonal - 1
+
+
+
+
+
 
 
     def distance_from_food(self):
@@ -145,7 +213,7 @@ class game():
         global max_score
         while self.run:
             # print(self.score)
-            if self.gamedecider == 0:
+            if True:
                 # reward = 100-(self.distance_from_food()/7)
                 # self.genome.fitness += 1
                 self.moves_left -= 1
@@ -153,132 +221,58 @@ class game():
                     # self.genome.fitness -= 50
                     break
                 # if self.genome.key == self.genome_to_display or self.score>200:
-                pygame.time.delay(50)
+                # pygame.time.delay(50)
+                if len(self.cube.path) == 0:
+                    if self.algorithm == "neat_shortvision":
+                        self.cube.path = algorithms.neat_shortvision(self.vision(), self.distance_from_food(), self.cube.y, self.cube.x, self.cube)
+                    elif self.algorithm == "bfs":
+                        self.cube.path = algorithms.bfs(self.board, self.cube.y//20, self.cube.x//20)
+                    elif self.algorithm == "dfs":
+                        self.cube.path = algorithms.dfs(self.board, self.cube.y//20, self.cube.x//20)
+                    elif self.algorithm == "a_star":
+                        self.cube.path = algorithms.a_star(self.board, self.cube.y//20, self.cube.x//20, self.food.y//20, self.food.x//20)
+                    elif self.algorithm == "neat_long_vision":
+                        prev = self.long_vision()
+                        self.cube.path = algorithms.neat_long_vision(prev, self.distance_from_food(), self.cube.y, self.cube.x, self.cube, self.file)
+                    # print(self.cube.path)
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         self.run = False
                 # keys = pygame.key.get_pressed()
+
                 for index, heads in reversed(list(enumerate(self.body))):
+
                     if index == 0:
                         heads.x = self.cube.x
                         heads.y = self.cube.y
                     else:
                         heads.x = self.xpos(index - 1)
                         heads.y = self.ypos(index - 1)
-                output = self.net.activate(
-                    (*self.distance_from_food(), *self.vision()))
-                direction = self.moves[output.index(max(output))]
+                output = self.cube.path.pop()
                 # print("inputs: ",*self.distance_from_food())
                 # print("direction: ", direction)
-                if direction == "right":
-                    if self.cube.up:
-                        self.cube.x_vel = 1
-                        self.cube.y_vel = 0
-                        self.cube.up = False
-                        self.cube.left = False
-                        self.cube.right = True
-                        self.cube.down = False
-                    elif self.cube.right:
-                        self.cube.x_vel = 0
-                        self.cube.y_vel = 1
-                        self.cube.up = False
-                        self.cube.left = False
-                        self.cube.right = False
-                        self.cube.down = True
-                    elif self.cube.down:
-                        self.cube.x_vel = -1
-                        self.cube.y_vel = 0
-                        self.cube.up = False
-                        self.cube.left = True
-                        self.cube.right = False
-                        self.cube.down = False
-                    elif self.cube.left:
-                        self.cube.x_vel = 0
-                        self.cube.y_vel = -1
-                        self.cube.up = True
-                        self.cube.left = False
-                        self.cube.right = False
-                        self.cube.down = False
-                elif direction == "left":
-                    if self.cube.down:
-                        self.cube.x_vel = 1
-                        self.cube.y_vel = 0
-                        self.cube.up = False
-                        self.cube.left = False
-                        self.cube.right = True
-                        self.cube.down = False
-                    elif self.cube.left:
-                        self.cube.x_vel = 0
-                        self.cube.y_vel = 1
-                        self.cube.up = False
-                        self.cube.left = False
-                        self.cube.right = False
-                        self.cube.down = True
-                    elif self.cube.up:
-                        self.cube.x_vel = -1
-                        self.cube.y_vel = 0
-                        self.cube.up = False
-                        self.cube.left = True
-                        self.cube.right = False
-                        self.cube.down = False
-                    elif self.cube.right:
-                        self.cube.x_vel = 0
-                        self.cube.y_vel = -1
-                        self.cube.up = True
-                        self.cube.left = False
-                        self.cube.right = False
-                        self.cube.down = False
-                else:
-                    pass
-                prev = self.vision()
-                if self.cube.up:
-                    self.cube.y -= 20
-                elif self.cube.down:
-                    self.cube.y += 20
-                elif self.cube.right:
-                    self.cube.x += 20
-                elif self.cube.left:
-                    self.cube.x -= 20
-                # for heads in self.body:
-                #     if self.cube.x == heads.x and self.cube.y == heads.y:
-                #         self.gamedecider = 1
-                #         for x in range(0, 4):
-                #             self.win.fill((0, 0, 0))
-                #             self.gr.draw(self.win)
-                #             self.food.draw(self.win)
-                #             text = self.sfont.render("Score:" + str(self.score), True, (255, 255, 255))
-                #             self.win.blit(text, (520, 100))
-                #             pygame.display.update()
-                #             pygame.time.delay(500)
-                #             self.win.fill((0, 0, 0))
-                #             for test in self.body:
-                #                 test.draw(self.win)
-                #             self.gr.draw(self.win)
-                #             self.cube.draw(self.win)
-                #             self.food.draw(self.win)
-                #             text = self.sfont.render("Score:" + str(self.score), True, (255, 255, 255))
-                #             self.win.blit(text, (520, 100))
-                #             pygame.display.update()
-                #             pygame.time.delay(500)
 
+
+                self.cube.x = output[1]*20+1
+                self.cube.y = output[0]*20+1
                 self.update_board(False)
                 # print(self.cube.y // 20, self.cube.x // 20)
                 if self.board[self.cube.y // 20][self.cube.x // 20] == -100:
-                    print(prev)
+                    # pygame.time.delay(10000)
                     # self.genome.fitness -= 100
-                    break
+                    return prev
                 if self.cube.x == self.food.x and self.cube.y == self.food.y:
                     self.food.x = random.randrange(21, 222, 20)
                     self.food.y = random.randrange(21, 222, 20)
                     # self.genome.fitness += 10
                     self.moves_left = 200
                     while self.board[self.food.y//20][self.food.x//20] != 0:
-                        print(self.board[self.food.y//20][self.food.x//20])
+                        # print(self.board[self.food.y//20][self.food.x//20])
                         self.food.x = random.randrange(21, 222, 20)
                         self.food.y = random.randrange(21, 222, 20)
-                    print(self.food.y // 20, self.food.x // 20)
+                    # print(self.food.y // 20, self.food.x // 20)
 
-                    self.body.append(head(self.cube.x, self.cube.y))
+                    self.body.append(head(self.body[-1].x, self.body[-1].y))
                     # self.body.append(head(self.cube.x, self.cube.y))
                     self.score += 1
                     # if self.score>max_score:
@@ -288,39 +282,41 @@ class game():
                 # if self.genome.key == self.genome_to_display or self.score>200:
                     # print(self.distance_from_walls())
                     # print(self.vision(), self.cube.y_vel)
-                self.redrawWindow()
+                # self.redrawWindow()
                     # print(self.cube.x, self.cube.y, self.food.x, self.food.y, self.distance_from_walls(), self.cube.x_vel, self.cube.y_vel)
             else:
                 break
 
         # pygame.quit()
 
+def selu_activation(z):
+    lam = 1.0507009873554804934193349852946
+    alpha = 1.6732632423543772848170429916717
+    return lam * z if z > 0.0 else lam * alpha * (math.exp(z) - 1)
 
-pygame.init()
-gen = 0
-max_fitness_genome_id, max_fitness = 1, 0
-
-
-def main(genomes, config):
-    global gen, max_fitness, max_fitness_genome_id
-    # max_fit, max_id = 1, 0
-    gen += 1
-    # for _, g in genomes:
-    # g.fitness = 0
-    net = pickle.load(open(r"C:\Users\Admin\Desktop\Misc\snake winners\winner1.pkl", 'rb'))
-    interface = game(net)
-    interface.main()
-    # max_id, max_fit = (g.key, g.fitness) if g.fitness >= max_fit else (max_id, max_fit)
-    # max_fitness_genome_id, max_fitness = max_id, max_fit
-    # print(max_fitness_genome_id)
-
-
-def run(config_file):
+if __name__ == "__main__":
+    pygame.init()
+    config_file = 'config-feedforward.txt'
     config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
                          neat.DefaultSpeciesSet, neat.DefaultStagnation,
                          config_file)
-    main(None, config)
+    config.genome_config.add_activation('selu', selu_activation)
+    for file in os.listdir():
+        if 'pkl' not in file:
+            continue
+        for i in range(10):
+            interface = game("neat_long_vision", file)
+        # interface = game("dfs")
+        # interface = game("a_star")
+            last_vision = interface.main()
+            if not last_vision:
+                break
+            for i in range(3):
+                if last_vision[i] > 0:
+                    break
+            else:
+                continue
+            break
+        else:
+            print(file)
 
-
-config_path = 'config-feedforward.txt'
-run(config_path)
