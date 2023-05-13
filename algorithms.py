@@ -3,6 +3,15 @@ import pickle
 import math
 import random
 import heapq
+import pygame as pg
+import sys
+from random import randint
+import time
+import os
+from collections import deque
+
+
+
 
 class astar:
     def __init__(self, mat):
@@ -21,7 +30,7 @@ class astar:
     def heuristic(self, curr, end):
         return math.sqrt(((curr[0] - end[0]) ** 2) + ((curr[1] - end[1]) ** 2))
 
-    def algo(self, start, end, algorithm='a'):
+    def algo(self, start, end, algorithm='a', path_pref = 'shortest'):
         cost = {}
         parent = {}
         visited = set()
@@ -30,6 +39,8 @@ class astar:
         parent[start] = None
         while len(pq) > 0:
             node = heapq.heappop(pq)
+            # if node[0] == -float('inf'):
+            #     continue
             # if cost.get(node[2]):
             #     if node[1]>cost.get(node[2]):
             #         continue
@@ -42,22 +53,22 @@ class astar:
 
             for move in self.moves:
                 curr = (node[2][0] + move[0], node[2][1] + move[1])
-                if curr[0] < 0 or curr[1] < 0 or curr[0] > 24 or curr[1] > 24 or curr in visited:
+                if curr[0] < 0 or curr[1] < 0 or curr[0] > 24 or curr[1] > 24 or curr in visited or self.mat[curr[0]][curr[1]]==float('inf'):
                     continue
                 cost_to_curr = cost[node[2]] + self.mat[curr[0]][curr[1]]
                 curr_cost = cost.get(curr)
-                if not curr_cost or curr_cost > cost_to_curr:
+                if not curr_cost or (curr_cost > cost_to_curr if path_pref == 'shortest' else curr_cost < cost_to_curr):
                     cost[curr] = cost_to_curr
                     parent[curr] = node[2]
                     curr_priority = self.heuristic(curr, end) + cost_to_curr if algorithm == 'a' else self.heuristic(
                         curr, end)
-                    heapq.heappush(pq, (curr_priority, cost_to_curr, curr))
+                    heapq.heappush(pq, (curr_priority, cost_to_curr, curr) if path_pref == 'shortest' else (-curr_priority, -cost_to_curr, curr))
+        return []
 
-
+directions = [(1, 0), (0, 1), (0, -1), (-1, 0)][::-1]
 def dfs(matrix, row, col):
     path = []
     visited = set()
-    directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
     matrix[row][col] = 99
 
     def helper(row, col, search_for=100):
@@ -87,7 +98,6 @@ def dfs(matrix, row, col):
 def bfs(matrix, row, col, to_search=100):
     # for row in matrix:
     #     print(*row)
-    directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
     path = []
     q = queue.Queue()
     parent = {}
@@ -124,7 +134,7 @@ def bfs(matrix, row, col, to_search=100):
 
 
 def neat_shortvision(vision, distance_from_food, row, col, cube):
-    net = pickle.load(open(r"C:\Users\Admin\Desktop\Misc\snake winners\winner1.pkl", 'rb'))
+    net = pickle.load(open(r"winner_short_vision.pkl", 'rb'))
     output = net.activate(
         (*distance_from_food, *vision))
     moves = ["forward", "right", "left"]
@@ -194,7 +204,8 @@ def neat_shortvision(vision, distance_from_food, row, col, cube):
         row += cube.y_vel * 20
     return [(row//20, col//20)]
 
-def neat_long_vision(vision, distance_from_food, row, col, cube, file):
+def neat_long_vision(vision, distance_from_food, row, col, cube, file = "winner.pkl", *args):
+    # file = "winner.pkl"
     net = pickle.load(open(file, 'rb'))
     output = net.activate(
         (*distance_from_food, *vision))
@@ -259,6 +270,99 @@ def neat_long_vision(vision, distance_from_food, row, col, cube, file):
             cube.left = False
             cube.right = False
             cube.down = False
+    if file == "winner.pkl":
+        matrix = args[0]
+        foodrow = args[1]
+        foodcol = args[2]
+        new_matrix = [[0] * 25 for i in range(25)]
+        for i in range(25):
+            for j in range(25):
+                new_matrix[i][j] = float('inf') if matrix[i][j] == -100 else 0
+        algorithm = astar(new_matrix)
+        ans = algorithm.algo((row//20, col//20), (foodrow, foodcol), path_pref='longest')[::-1]
+        if len(ans) > 0:
+            ans.pop()
+        if len(ans) == 0:
+            return bfs(matrix, row//20, col//20, 0)
+        for r, c in ans:
+            if matrix[r][c] == -100:
+                return bfs(matrix, row, col, 0)
+        return ans
+
+
+    if cube.x_vel != 0:
+        col += cube.x_vel * 20
+    else:
+        row += cube.y_vel * 20
+
+
+
+    return [(row//20, col//20)]
+
+def neat_full_vision(vision, distance_from_food, row, col, cube, file):
+    net = pickle.load(open(file, 'rb'))
+    output = net.activate(
+        (*distance_from_food, *vision))
+    moves = ["forward", "right", "left"]
+    direction = moves[output.index(max(output))]
+    if direction == "right":
+        if cube.up:
+            cube.x_vel = 1
+            cube.y_vel = 0
+            cube.up = False
+            cube.left = False
+            cube.right = True
+            cube.down = False
+        elif cube.right:
+            cube.x_vel = 0
+            cube.y_vel = 1
+            cube.up = False
+            cube.left = False
+            cube.right = False
+            cube.down = True
+        elif cube.down:
+            cube.x_vel = -1
+            cube.y_vel = 0
+            cube.up = False
+            cube.left = True
+            cube.right = False
+            cube.down = False
+        elif cube.left:
+            cube.x_vel = 0
+            cube.y_vel = -1
+            cube.up = True
+            cube.left = False
+            cube.right = False
+            cube.down = False
+    elif direction == "left":
+        if cube.down:
+            cube.x_vel = 1
+            cube.y_vel = 0
+            cube.up = False
+            cube.left = False
+            cube.right = True
+            cube.down = False
+        elif cube.left:
+            cube.x_vel = 0
+            cube.y_vel = 1
+            cube.up = False
+            cube.left = False
+            cube.right = False
+            cube.down = True
+        elif cube.up:
+            cube.x_vel = -1
+            cube.y_vel = 0
+            cube.up = False
+            cube.left = True
+            cube.right = False
+            cube.down = False
+        elif cube.right:
+            cube.x_vel = 0
+            cube.y_vel = -1
+            cube.up = True
+            cube.left = False
+            cube.right = False
+            cube.down = False
 
     if cube.x_vel != 0:
         col += cube.x_vel * 20
@@ -266,12 +370,29 @@ def neat_long_vision(vision, distance_from_food, row, col, cube, file):
         row += cube.y_vel * 20
     return [(row//20, col//20)]
 
+def longest_path(matrix, row, col, foodrow, foodcol):
+    new_matrix = [[0] * 25 for i in range(25)]
+    for i in range(25):
+        for j in range(25):
+            new_matrix[i][j] = float('inf') if matrix[i][j] == -100 else 1
+    algorithm = astar(new_matrix)
+    ans = algorithm.algo((row, col), (foodrow, foodcol), path_pref='longest')[::-1]
+    if len(ans) > 0:
+        ans.pop()
+    if len(ans) == 0:
+        return bfs(matrix, row, col, 0)
+    for r, c in ans:
+        if matrix[r][c] == -100:
+            return bfs(matrix, row, col, 0)
+    return ans
+
+
 
 def a_star(matrix, row, col, foodrow, foodcol):
     new_matrix = [[0] * 25 for i in range(25)]
     for i in range(25):
         for j in range(25):
-            new_matrix[i][j] = float('inf') if matrix[i][j] == -100 else 0
+            new_matrix[i][j] = float('inf') if matrix[i][j] == -100 else 1
     algorithm = astar(new_matrix)
     ans = algorithm.algo((row, col), (foodrow, foodcol))[::-1]
     if len(ans) > 0:
@@ -288,9 +409,8 @@ if __name__ == "__main__":
     matrix = [[0] * 25 for i in range(25)]
     for i in range(13):
         for j in range(13):
-            if i == 0 or i == 12 or j == 0 or j == 12:
+            if i == 0 or i == 4 or j == 0 or j == 4:
                 matrix[i][j] = -100
-    # for i in range(12):
-    #     matrix[4][i] = -100
-    # matrix[3][1] = 100
+    print(a_star(matrix,1,1,3,3))
+
 

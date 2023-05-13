@@ -102,8 +102,8 @@ class game():
         return self.body[y].y
 
     def distance_from_walls(self):
-        left = (self.cube.x)
-        up = (self.cube.y)
+        left = self.cube.x
+        up = self.cube.y
         right = (482 // 2 - self.cube.x) - 19
         down = (482 // 2 - self.cube.y) - 19
         return min(up, left, down, right)
@@ -296,8 +296,6 @@ class game():
                         self.cube.left = False
                         self.cube.right = False
                         self.cube.down = False
-                else:
-                    pass
 
                 if self.cube.up:
                     self.cube.y -= 20
@@ -312,13 +310,13 @@ class game():
                 # print(self.cube.y // 20, self.cube.x // 20)
                 if self.board[self.cube.y // 20][self.cube.x // 20] == -100:
                     for i in range(3):
-                        if vision[i]>0:
+                        if vision[i] > 0:
                             self.genome.fitness -= 99 * self.score
                             break
                     else:
                         if self.score > 15:
-                            pickle.dump(self.net, open(str(complete)+str(self.score)+'.pkl','wb'))
-                            complete+=1
+                            pickle.dump(self.net, open(str(complete) + str(self.score) + '.pkl', 'wb'))
+                            complete += 1
                         if self.score > max_score_complete:
                             pickle.dump(self.net, open('winner.pkl', 'wb'))
                             max_score_complete = self.score
@@ -345,7 +343,6 @@ class game():
                     # print(self.vision(), self.cube.y_vel)
                     self.redrawWindow()
                     pass
-                    # print(self.cube.x, self.cube.y, self.food.x, self.food.y, self.distance_from_walls(), self.cube.x_vel, self.cube.y_vel)
             else:
                 break
 
